@@ -37,11 +37,12 @@ mpz_class pollard_p_minus_1(mpz_class c, mpz_class max, mpz_class n)
 	mpz_class g;
 
 	for (mpz_class i = 1; i < max; i++) {
-		mpz_class res;
+//		mpz_class res;
+//		mpz_pow_ui(res.get_mpz_t(), m.get_mpz_t(), mpz_get_ui(i.get_mpz_t()) );
+//		m = res % n;
 
-		mpz_pow_ui(res.get_mpz_t(), m.get_mpz_t(), mpz_get_ui(i.get_mpz_t()) );
-
-		m = res % n;
+// faster version:
+		mpz_powm(m.get_mpz_t(), m.get_mpz_t(), i.get_mpz_t(), n.get_mpz_t());
 
 		if (i % 10 == 0) {
 			mpz_class temp = m - 1;
@@ -58,16 +59,19 @@ mpz_class pollard_p_minus_1(mpz_class c, mpz_class max, mpz_class n)
 	return -1;
 }
 
-void func()
+void func(mpz_class a)
 {
-	mpz_class a;
-
-
-	a = "2967712933176139505325218827281016830172885377668890665422303521091925853065808657763875660509418806842054224785177504767070016206910781672103368981812004063609160919203696870514423547321725245287923332418660222579507200000000000000001";
-
 	std::cout << "a: " << a << std::endl;
 
-	mpz_class g = pollard_p_minus_1(2, 1000, a);
+	mpz_class g;
+
+	for (int i = 2; i < 300; i++) {
+		std::cout << "i: " << i << std::endl;
+		g = pollard_p_minus_1(i, 1000000, a);
+		if (g != -1) {
+			break;
+		}
+	}
 
 	if (mpz_probab_prime_p(g.get_mpz_t(), 50)) {
 		std::cout << "found prime!" << std::endl;
@@ -86,7 +90,9 @@ void func()
 
 int main()
 {
-	func();
+
+	func(2967712933176139505325218827281016830172885377668890665422303521091925853065808657763875660509418806842054224785177504767070016206910781672103368981812004063609160919203696870514423547321725245287923332418660222579507200000000000000001_mpz); // 779-bit key
+	func(253492469520653197083351904322634118562257623727339245721183851919106703858280081_mpz); // 268-bit key
 
 	return 0;
 }
