@@ -2,6 +2,8 @@
 	Ruxcon 2003 "Attacking RSA Key generators" by icebsd - revisited
 
 	Factorising the 779-bit key using pollard p-1.
+	Also factorises the 268-bit key using pollard p-1.
+	Optimised code so that it evaluates the modular exponentiation much faster.
 
 	To compile: g++ test.cpp -lgmpxx -lgmp 
 
