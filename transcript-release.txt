@@ -1,0 +1,1048 @@
+[This is an ASCII text file, line terminated with \n. Use "wordpad" under
+Windows to open this file.]
+
+========================================================
+Attacking RSA Key Generators
+by Icebsd
+
+Dated: 2003-04-18
+Version: 1.01
+
+transcript of slides from Ruxcon 2003, with explanations.
+=========================================================
+
+-------------
+Introduction
+-------------
+
+It should be noted that I am from a programming background and am not a
+professional cryptographer and I've only studied this topic for a couple
+of months before this presentation. There will be obvious flaws and I hope
+people will email me and correct me. I would like to consider myself as a
+journalist more than a mathematician at this point, for the presentation
+and for this accompanying transcript. Also note that there is nothing new
+here for cryptographers and number theorists -- the aim was to approach
+the general software developer community, and to shed some light on a very
+deep and complex subject of number theory.
+
+I just want to take this time to say that whilst this presentation breaks
+several "large" RSA keys, I want the reader to note that the chances of
+this happening in the real world are very rare to non-existant and I don't
+want to overplay these attacks. The emphasis from the presentation is
+learning how to create good RSA key generators.
+
+Cryptography covers an area of security where the nature of its security
+depends on its probabilities. Whilst it is debatable whether any of this
+reflects real world attacks, the ease of cracking weak public keys
+combined with the ease of obtaining public keys makes the practical value
+not something to overlook, especially when they can be prevented with a
+few lines of code in the generator.
+
+During Ruxcon, where I presented this material, I was not able to go into
+detail many of the things due to time constraints, and hopefully I've
+explained them in more detail here. Also, a couple of errors have been
+corrected and noted in the errata section.
+
+I hope you find this transcript helpful in some way.
+
+Yours sincerely,
+
+Icebsd
+
+
+============================================================
+Errata
+============================================================
+
+2003-04-16
+
+Slide #17:
+Lucas Lehmer primality test is deterministic, not probabilistic. It will
+eventually find an answer for Mersenne numbers.
+
+Slide #19: 
+M(30) is incorrect (obviously, since 30 is not prime). The intention was
+to signify around 30 Mersenne primes have been discovered, which is
+actually 39 in the last count (and this is ever slowly increasing, so it
+may be 40 by the time you read this.) and not M(30).
+
+General grammar and spelling fixes, along with some extra clarification
+where it was necessary.
+
+============================================================
+Slides
+============================================================
+
+------------------------------------------------------------
+Slide #1 - Attacking RSA Key Generators
+------------------------------------------------------------
+
+------------------------------------------------------------
+Slide #2 - Understanding RSA
+------------------------------------------------------------
+
+* Asymmetric Key algorithm
+   - There is no problem with swapping (public) keys over insecure
+channels.
+   - Authentication Problems.
+   - Usually has a method for digital signatures.
+
+* Symmetric Key algorithm
+   - Problem with swapping keys over insecure channels.
+   - No problems involving authentication. 
+   - Usually used with MACs
+
+-----------
+Explanation
+-----------
+
+RSA is of the asymmetric key type. This means there are two separate and
+different keys to be used for the communication, an encryption key and a
+decryption key. For the sake of simplicity, this also includes
+key-exchange algorithms such as DH (Diffie-Hellman).
+
+DES is an example of the symmetric key algorithm. Common terms for
+symmetric key algorithms include: block cipher, stream cipher. 
+
+With asymmetric key algorithms, there is no problem swapping keys over
+insecure channels, as the keys are separate and different for encryption
+and decryption. Even if the public key was received by someone else, they
+cannot decrypt the messages. 
+
+Obviously a symmetric key algorithm has problems sending their key over
+insecure channels, as this key is the decryption key as well as the
+encryption key. Symmetric algorithms are often used in conjunction with
+asymmetric algorithms.
+
+One of the biggest problems with asymmetric algorithms is the explicit
+need for authentication. 
+
+Symmetric algorithms, on the other hand, require a secure channel for key
+exchange, which is preceded by implicit authentication.
+
+Keywords (for diagrams below):
+------------------------------
+
+secured channel: 
+a method of communication that is secure and doesn't require cryptographic
+measures. Actions for this secured channel denoted in parenthesis. e.g.
+secured channel(key exchange). Usually preceded by formal authentication
+(i.e. face to face, id card, token, etc.)
+
+key exchange: 
+sending public keys or shared keys for communication.
+
+fingerprint exchange: 
+sending fingerprints of public keys.
+
+fingerprint check: 
+checking fingerprints of public keys.
+
+communicate: 
+communication with cryptography.
+
+Diagrams
+--------
+
+Symmetric: secured channel(key exchange) -> communicate.
+
+Insecure Asymmetric: key exchange -> communicate.
+
+Secure Asymmetric: secured channel(fingerprint exchange) -> key exchange
+-> fingerprint check -> communicate.
+
+Because authentication (fingerprint exchange and check) is as troublesome
+as setting up a secured channel, they may choose to compromise their
+security for more convenience. Such as using third parties to introduce
+public keys, e.g. trusted certificate authorities, friends, etc. Or
+reducing a secured channel to less secure but still relatively hard to
+modify channels, such as telephone. Or accepting a key without
+authentication for the first time and then relying upon the key's
+fingerprint for future communication, taking the chance that the first
+connection has a low probability of being hijacked. 
+
+
+It should be well known to the reader that digital signatures prevent
+forgery and modification of messages. The methods to do digital signatures
+can be found in nearly all public crypto textbooks, and will be
+side-stepped here. 
+
+MAC (message authentication code) as used in symmetric is the paradigm of
+this. By hashing the message with a secret, the message integrity can be
+ensured, because the attackers won't know the secret that was used.  
+However, it's still possible to do replay attacks, but that can be
+countered with a timestamp inside the message.
+
+
+------------------------------------------------------------
+Slide #3 - Why attack RSA generators?
+------------------------------------------------------------
+
+* The generator is one of the easiest points to attack.
+* The other major weak points revolve around utilising the private
+key. e.g. decryption oracles, side-channel attacks, etc.
+* Bad generators lead to weak public keys.
+* Weak keys are worse than weak passwords.
+* And because ...
+* "Some primes are more equal than others."
+
+-----------
+Explanation
+-----------
+
+Generally, the generator is a piece of code that can possibly be viewed by
+an attacker. But whether or not the source is available is irrelevant,
+since the key pairs generated can also be used.
+
+Other weak points don't really involve the public key, as it assumes a
+good generator was used and that the RSA algorithm is secure. 
+
+Bad generators will eventually lead to a weak public key. The odds of this
+happening is generally extremely low, but from a developer's point of
+view, it's not something that is acceptable when only a few lines of code
+can correct it.
+
+At least, with weak passwords, you know what you're setting yourself up
+for. With weak keys, you'd never know until it's too late. You could end
+up with a false sense of security.
+
+"Some primes are more equal than others." We'll see more examples of this
+shortly, and it'd be clear what this actually means. But a trivial example
+is simply that one of the primes created could be very small in a
+non-bounded generator.
+
+------------------------------------------------------------
+Slide #4 - Other attacks - public key
+------------------------------------------------------------
+
+* Factorisation methods:
+   - Continued Fraction (CFRAC) - Morrison, Brillhart [1975]
+   - Quadratic Sieve (QS) - C. Pomerance [1985]
+   - Multiple Polynomial Quadratic Sieve (MPQS) - Silverman, Montgomery [1987]
+   - Elliptic Curve Method - A.K. Lenstra, H.W. Lenstra Jnr [1987]
+   - Number Field Sieve (NFS) - J.M. Pollard, A.K. Lenstra, H.W. Lenstra 
+Jnr, M.S. Manasse [1990]
+
+-----------
+Explanation
+-----------
+
+These methods are "general" methods to attack public keys and don't offer 
+any significant advantage (at least not in the scope of this presentation) 
+to break keys created by poor generators. 
+
+They are listed here for interest only.
+
+------------------------------------------------------------
+Slide #5 - Other attacks - private key
+------------------------------------------------------------
+
+* Decryption oracle: "Chosen ciphertext attack against several e-mail 
+encryption protocols." - Jon Katz, Bruce Schneier [2000]
+* Side-channel: "Timing attacks on DH, RSA, DSS and other systems." - Paul 
+Kocher [1995]
+
+-----------
+Explanation
+-----------
+
+These attacks need to access the private key either indirectly (via
+decryption oracles) or directly (via physical access, smartcards, etc).  
+A side-channel attack on DES was covered in an earlier Ruxcon
+presentation.
+
+------------------------------------------------------------
+Slide #6 - Other attacks - ciphertext message
+------------------------------------------------------------
+
+* Minor weak points involve bad padding schemes.
+   - e.g. C = M^e mod n
+   - let M = 0 then C = 0.
+* "Optimal Asymmetric Encryption -- How to encrypt with RSA." - Bellare, 
+Rogaway [Eurocrypt 1994]
+* "Low-exponent RSA with Related Messages." - Coppersmith, Franklin, 
+Patarin, Reiter [Eurocrypt 1996]
+* "Breaking RSA may not be equivalent to factoring." - Boneh, Venkatesan 
+[Eurocrypt 1998]
+* "A chosen ciphertext attack on RSA OAEP." - Manger [2001]
+
+-----------
+Explanation
+-----------
+
+The trivial example of C=0 shows that without proper encoding, RSA cannot 
+guarantee security alone. 
+
+Again, they are listed here for interest only.
+
+------------------------------------------------------------
+Slide #7 - For developers
+------------------------------------------------------------
+
+* Generators are only used once per key pair...
+* Messages - need to be a recipient and/or have access to a decryption
+oracle
+* Private key - hard to get, but may be stored on token devices. e.g. 
+smartcards, thumb-drives, etc.
+* Public key - freely available. 
+* If public keys being generated can be easily cracked, then it holds more 
+practical value than attacks that utilise private keys. 
+
+-----------
+Explanation
+-----------
+
+Virtually all attacks against poorly generated public keys are well-known
+for the last 20 years and should not be thrown away as mere "fiction" due
+to the ever-increasing key size. The attacks are still as valid today as
+they were 20 years ago, although the probability of them being useful has
+become rarer as key sizes grow larger. The actual probabilities are not
+known to this author, but is acknowledged as being rare to non-existant in
+the real world. It is the theoretical side that the author wishes to
+demonstrate later in this presentation.
+
+The first few points are reasons why developers should address the issue
+of poor generators. The last point just acknowledges the ease of cracking
+weak keys, which is later demonstrated.
+
+------------------------------------------------------------
+Slide #8 - Introducing the RSA algorithm
+------------------------------------------------------------
+
+* gcm, lcm and mod
+* Fermat's little theorem
+* Euler's phi function
+* RSA algorithm
+* RSA key generation
+
+-----------
+Explanation
+-----------
+
+This is a list of topics that will be discussed.
+
+------------------------------------------------------------
+Slide #9 - GCD, LCM and MOD
+------------------------------------------------------------
+
+* gcd(a, b) is the largest divisor common to a and b.
+* If gcd(a, b) = 1, then a and b are co-prime or relatively prime to each 
+other. 
+* lcm (a, b) = (a * b) / gcd(a, b)
+* GCD operations can be done with using mod and doesn't require a prime 
+factorisation. (Euclid's gcd algorithm).
+* r = x mod y, where r is the remainder of x / y.
+* mod behaves like an analog clock. e.g. 22:00 mod 12 = 10 o'clock.
+
+-----------
+Explanation
+-----------
+
+Although gcd and lcm are trivial calculations, the explanations are not.  
+There are many ways to state what a gcd operation is, such as: the minimum
+of exponential powers in a prime factorisations of each parameter, the
+largest divisor common to all parameters, the value (a*b)/lcm(a,b), etc.
+
+An example use for lcm would be to avoid clashes in cron jobs, i.e. as 
+long as the interval between cron job (a) and (b) have an lcm(a,b) > 60 
+(minutes) then it will never clash in a minute of the hour job.
+
+The last point shows that a analog clock is a device that shows the
+remainder of 24-hour time. Such visualisations help in understanding RSA
+and similar algorithms, where mod operations are heavy.
+
+------------------------------------------------------------
+Slide #10 - Fermat's little theorem
+------------------------------------------------------------
+
+* For any odd integer n, composite and satisfies: 
+   2^(n-1) = 1 (mod n)
+* Then n is said to be pseudoprime.
+* All primes will pass this test, although some composites will also pass 
+this test.
+* There is nothing special about "2". If n satisfies b^(n-1) = 1 (mod n), 
+and n is relatively prime to b, then n is pseudoprime to the base b.
+
+-----------
+Explanation
+-----------
+
+Fermat's little theorem is also known as the pseudoprime test ("ps test"). 
+A "strong ps test" is discussed later. 
+
+The first number to pass the pseudoprime test is 341.
+
+The last point has an extra point inserted for clarity: it is also assumed
+that n and b are relatively prime. In the case where b=2, the value n was
+assumed to be odd, which is always relatively prime to 2.
+
+Using Fermat's little theorem to as many bases as possible can help
+determine primality with greater certainty, but there are non-prime
+numbers which will pass the test for ALL bases. These numbers are called 
+Carmichael numbers. The first such number is 561.
+
+------------------------------------------------------------
+Slide #11 - Euler Phi
+------------------------------------------------------------
+
+* Extending Fermat's little theorem is Euler's theorem.
+* Euler found the exact value to use instead of (n-1) to let all values of 
+n satisfy the Fermat's equation.
+* That is, b^(phi(n)) = 1 (mod n).
+* Where phi(n) is the number of positive integers less than n and is 
+co-prime to n.
+* In the case that 'n' is prime, then phi(n) = n-1. (Because n is prime,
+every integer less than n must be co-prime to n.)
+
+-----------
+Explanation
+-----------
+
+Euler found that the pseudoprime test could be satisfied for all n, if the
+value phi(n) was used instead of (n-1). Understanding phi(n), has become 
+the most important key in our understanding of RSA, which relies on this 
+equation to be true. 
+
+The method of calculating phi(n) for any integer n follows:
+
+1) Create the prime factorisation of n. i.e. find the primes of n, and
+make them into a form such that: PI(p_i^e_i) = n, where PI() is the
+multiplication of all elements, similar to SIGMA() which is for summation.
+(A better reference here:  
+http://mathworld.wolfram.com/PrimeFactorization.html )
+
+2) Because phi is multiplicative, i.e. phi(ab) = phi(a)phi(b). Hence, 
+phi(p_1^e_1)phi(p_2^e_2)... and so on will lead to phi(p_i^e_i).
+
+Let p be a prime number, and k be the exponent (from the prime 
+factorisation), then:
+   phi(p^k) = p^(k-1) * (p-1)
+
+Because of this, we can show that:
+
+   phi(n) = phi(p_1^e_1) * phi(p_2^e_2) * ... * phi(p_m^e_m)
+
+            (expanding the phi operations)
+          = p_1^(e_1-1) * (p_1-1) * p_2^(e_2-1) * (p_2-1) * .... 
+
+            (simplify the (p-1) part of the phi result)
+          = PI(i=1 to m: p_i - 1) * p_1^(e_1-1) * p_2^(e_2-1) ....
+
+            (simplify the p^(k-1) part of the phi result)
+          = PI(i=1 to m: p_i - 1) * n / PI(i=1 to m: p_i)
+
+            (and finally... division of PI(p-1) by PI(p) = PI(1 - 1/p) )
+          = n * PI(i=1 to m: 1 - 1 / p_i)
+
+e.g. 
+
+   phi(200) = phi(2^3 * 5^2)
+            = 200 * (1 - 1/2) * (1 - 1/5)
+            = 200 * 1/2 * 4/5
+            = 800 / 10
+            = 80
+
+Hopefully this example shows that phi(n) is an integer factorisation
+problem.
+
+------------------------------------------------------------
+Slide #12 - RSA Algorithm - The "Euler Phi" crypto algorithm
+------------------------------------------------------------
+
+* Primitives:
+   - Encryption: C = M^e mod n
+   - Decryption: M = C^d mod n
+* Values of d and e are chosen by the relationship: d * e = 1 mod phi(n)
+* This allows the following to be derived:
+   - We can prove that C^d (mod n) = M
+   - Assume M lies between 0 and n. i.e. M<=n 
+   - C^d (mod n) = (M^e)^d (mod n) = M^(e*d) (mod n)
+   - Because e*d = 1 mod phi(n)...
+   - M^(e*d) (mod n) = M^(k*phi(n) + 1) (mod n), where k is any integer.
+   - M^(k*phi(n)) * M^1 (mod n), (by exponential expansion)
+   - But M^(k*phi(n)) (mod n) = 1, (by Euler's theorem and mod)
+   - so we have:
+   - 1 * M^1 (mod n) = M (mod n) = M. (from assumption that M<=n)
+
+-----------
+Explanation
+-----------
+
+The famous RSA primitives are related by the e, d, phi(n) equation.
+
+The rest is just a proof that an encrypted ciphertext "C" can be decrypted 
+to produce message "M".
+
+One other note, in general for RSA encryption and decryption, we have to
+assume the stronger relation that M is also coprime to n. By assuming M is
+less than p and less than q, then we are certain of being coprime to n.
+
+------------------------------------------------------------
+Slide #13 - RSA Key Generation
+------------------------------------------------------------
+
+* Generate two primes, p and q.
+* n = p * q
+* Find phi(n). In this case, both p and q are prime, so we can shortcut 
+the calculation: phi(n) = (p-1)(q-1)
+* Choose a random e, where gcd(e, phi(n)) = 1.
+* Find d from the equation d*e = 1 mod phi(n).
+* Public key: e and n
+* Private key: d and n
+* Discard: p, q, and phi(n)
+
+-----------
+Explanation
+-----------
+
+To choose a random e such that gcd(e, phi(n)) = 1, all one needs to do is
+choose a random prime 'e' larger than phi(n). Of course it would then take
+a long time to encrypt or decrypt messages. But choosing random primes for
+e gives a good chance that e and phi(n) are coprime. One other factor is 
+that phi(n) will always be even, so we can easily skip even e's. 
+
+Given that e is coprime to phi(n), it can be proved that there will be an
+inverse d, that satisfies the d,e,phi(n) equation. By the way, d is known
+as the multiplicative inverse, or d is the inverse of e modulo n.
+
+The only other part that really needs explaining is finding 'd' from the
+equation d*e = 1 mod phi(n).
+
+Firstly, we have to find out what 1 mod phi(n) means. It means a 
+remainder of 1 of a number divided by phi(n). Or in other words, 1 more 
+than a multiple of phi(n). 
+
+   d * e = 1 + k * phi(n), for any integer k.
+
+Hence,
+
+   d = [1 + k * phi(n)] / e. 
+
+But that doesn't mean much to us!
+
+A better way to express the above equation:
+
+   d * e + phi(n) * k = 1.
+
+Which comes from the gcd extended formula:
+
+   gcd = m * a + n * b
+
+Of course, the similarities between the two is evident. The 1 at the end 
+of the first equation signify that gcd(e, phi(n)) = 1. That is, 1 is the 
+gcd. In that case, in the form of equation 2:
+
+   1 = d * e + k * phi(n)
+
+In the gcd extended, the values of m and n can be found. The algorithm for 
+the gcd extended is well known and out of the scope of this presentation.
+
+------------------------------------------------------------
+Slide #14 - Weaknesses of RSA Key Generators
+------------------------------------------------------------
+
+* Random number generator - entropy gathering
+* Prime number (primality) tests
+* Strong versus Weak primes
+* Weak prime factorisation algorithms: Trial division, Mersenne, phi(n), 
+Fermat's near sqrt, Pollard rho, Pollard p-1.
+* Demonstration
+
+------------------------------------------------------------
+Slide #15 - Entropy Gathering
+------------------------------------------------------------
+
+* A generator needs to gather entropy to create random numbers
+* Sometimes the entropy being gathered can be predicted or easily 
+influenced. 
+* Cryptographic hashes are usually used to de-skew entropy.
+* A bug in the code can lead to subtle flaws in key generation.
+
+-----------
+Explanation
+-----------
+
+These points are valid for any entropy gatherer, and not just specifically 
+to those used to generate primes for RSA keys.
+
+The method of entropy gathering may sometimes exist beyond the bounds of
+the developer's hands, such as those that use the Linux /dev/random.  
+Given that "a chain is only as strong as the weakest link", it should be 
+obvious how important entropy gathering plays a part in a good RSA key 
+generator.
+
+One of the key points of entropy gathering is avoiding entropy that can be
+easily predicted or influenced. In that case, many open source OSes use
+entropy from keyboard, mouse, hard drives, etc, all of which are either
+easily predicted or influenced by those with physical access to the
+machine. An example of good entropy would be white noise from a
+microphone. But some say bad entropy is better than none.
+
+In any case, a de-skew function should help alleviate bad entropy 
+problems.
+
+The main problem arises when that de-skew function, or any part of the
+code, empties entropy instead of maintaining or jumbling the entropy
+around. Perhaps an error in a bitmask function could cause a single bit 
+to be set to zero. This will lead to very predictable number generation.
+
+------------------------------------------------------------
+Slide #16 - Random Prime Generation
+------------------------------------------------------------
+
+* Linear searches for primes is not as effective as random jumps.
+* There are obvious factors to avoid, such as 2 and 3, which cover 50% and 
+33.33% of the integer space respectively.
+
+-----------
+Explanation
+-----------
+
+Linear searching for primes is not only more predictable to an attacker,
+but also slower to find primes. Prime number distribution is quite chaotic
+and there is a better chance of finding a prime by combining any search
+algorithm with random jumps (increments).
+
+------------------------------------------------------------
+Slide #17 - Primality testing
+------------------------------------------------------------
+
+* Probabilistic tests:
+   - Fermat's little theorem. (pseudoprime test)
+   - Miller Rabin. (strong pseudoprime test)
+* Deterministic tests:
+   - Trial division
+   - AKS - Agrawal, Kayal, Saxena [2002]
+   - Lucas-Lehmer Mersenne prime test
+
+-----------
+Explanation
+-----------
+
+Testing a number to determine whether or not is prime is also an essential
+part of any generator. If they use a probabilistic test, they should
+assume for possible errors. On the other hand, if one uses deterministic,
+it may take too long to find suitable primes. A combination of both
+tests may offer the best security.
+
+The most commonly used is the Miller Rabin probabilistic test, and most
+implementations of such tests use a number of "iterations". For each
+"iteration", a random base is used. They don't use sequential bases,
+e.g. 2, 3, etc, which isn't as effective. 
+
+The best general deterministic test at the moment is the AKS test, or
+"primes is in p". This test offers polynomial time for a deterministic
+test, although this is still slower than Miller Rabin. 
+
+The dangers of using composite numbers inside keys are obvious. But in
+some cases, the composite numbers will force things to break due to the
+incorrect result of phi(n), which means encryption and decryption will
+fail.
+
+As for the number of checks OpenSSL uses for their Miller Rabin test, have
+a look at crypto/bn/bn.h.
+
+------------------------------------------------------------
+Slide #18 - Strong vs Weak primes
+------------------------------------------------------------
+
+* Weak primes:
+   - Mersenne Primes, of the form M(n) = 2^n - 1
+   - Prime p, with p-1 and p+1 having small factors.
+   - There may be other attributes. New attributes may be discovered.
+* Strong primes are those without such weaknesses
+
+-----------
+Explanation
+-----------
+
+The reasoning for the 2nd point is that there are algorithms which can
+crack p-1 and p+1 primes very easily. 
+
+It should be noted that Elliptic Curve Method has superceded these
+algorithms and can work just as fast for a prime p+k, which is actually
+any prime. That is, p-1 and p+1 are just a specific example of Elliptic
+Curve Method. 
+
+That is where the argument of Strong vs Weak primes end, with the idea
+that strong primes offer little or no protection against Elliptic Curve
+Method. 
+
+Later in this presentation I demonstrated a factoring of a 779-bit key
+generated from two unbounded p-1 primes. But this is only theoretical.
+These primes are unlikely to occur in the real world, and offer only worst
+case scenerio.
+
+
+------------------------------------------------------------
+Slide #19 - Mersenne Primes
+------------------------------------------------------------
+
+* M(n) = 2^n - 1 is a Mersenne prime if and only if M(n) is prime.
+* This can be shown to occur only if n is prime.
+* The largest Mersenne prime is M(13,466,917) which is the 39th Mersenne
+Prime. 
+* Because there are only a handful of Mersenne primes, it's very rare for
+a generator to create or use a Mersenne prime.
+* Any key that uses a Mersenne prime for one of the factors can be cracked
+very easily.
+
+-----------
+Explanation
+-----------
+
+The first point is self-explanatory and relies on the definition that a
+Mersenne prime is not always generated from that formula. 
+
+The second point is not as easy to understand, but can be proven.
+
+The rest point out the rarity, but also the ease of which keys with
+Mersenne primes can be cracked. 
+
+------------------------------------------------------------
+Slide #20 - p-1 and p+1
+------------------------------------------------------------
+
+* If p is a prime, then if p-1 or p+1 contains small factors, then let the
+largest factor of p-1 or p+1 be z.
+* The time to factor a key using such a prime is O(z) for pollard p-1.
+* These types of primes are more common than Mersenne primes, but are
+still rare. 
+* William's p+1 algorithm is not discussed here.
+
+-----------
+Explanation
+-----------
+
+On average, the largest prime factor for an arbitrary integer is 0.63
+power of that integer. That means (p-1)^0.63 will indicate the number of
+iterations that is required for the pollard p-1 to work. 
+
+In other words, with regards to using arbitrary integers, pollard p-1 with
+an iteration of 200,000 can factor keys that use 28-bit primes.
+
+But because the spread of the largest prime factor varies greatly, it may
+not always be the right number of iterations. 
+
+If the largest factor happened to be 28-bits or less, whether it be by
+sheer luck, generator error, or forcefully generated, then it can be
+cracked easily. 
+
+Because the largest prime it can factor can be found like this:
+
+   largest prime = iterations^(100/63)
+
+It's obvious for large primes that this method holds little or no hope of
+cracking them.
+
+------------------------------------------------------------
+Slide #21 - Trial Division
+------------------------------------------------------------
+
+* Algorithm:
+
+1) Create a table of prime numbers using a sieve.
+
+2) Let n be the number to factor:
+   For i = 1 to prime_table_size do
+      if (n mod prime_table[i]) == 0 then
+         prime_table[i] is one of the factors. 
+      end if
+   done
+
+3) n / prime_table[i] is the other factor.
+
+* Prime number theorem = x / ln(x)
+
+-----------
+Explanation
+-----------
+
+Usually the prime table is not larger than the first 5000 primes. This can
+be created with a sieve, which is demonstrated as follows:
+
+1) For each base number b, we cross out each multiple of it up until the
+maximum value. e.g. if b = 2, then 4, 6, 8, 10, 12, 14, 16, 18 ... are all
+crossed out.
+
+2) Bases can only be those numbers which haven't yet been crossed out. In
+this case, the next base is 3. So, 9, 15, 21 ... are all crossed out.
+
+3) The ones left over in the sieve table are primes. Move them to a prime
+table so they can be sequentially accessed.
+
+The second part of the algorithm is just trying to find if any of the
+primes divide into the number 'n' (i.e. remainder = 0). If there is any
+factors, then we are done.
+
+The last point is just a space filler, and is useful for knowing how many
+primes there are in the under the number 'x'. E.g. How many primes are
+there under 100? 100 / ln(100) gives you an approximation, and the
+accuracy increases as x approaches infinity. 
+
+------------------------------------------------------------
+Slide #22 - Mersenne Crack
+------------------------------------------------------------
+
+* Remember, M(n) is prime only if n is prime.
+
+* Algorithm (using the same prime table from trial division):
+   For i = 1 to prime_table_size:
+      if test_primality(2^n-1) == true then
+         if (n mod M(n)) == 0 then 
+            M(n) is one of the factors.
+         end if
+      end if
+   done
+
+* n / M(n) is the other factor.
+   
+
+-----------
+Explanation
+-----------
+
+It should be noted that the only difference between this and trial
+division is that it uses Mersenne primes. The function
+test_primality() would of course test if n is prime first, and then either
+use a probabilistic or Lucas-Lehmer test to see if M(n) is truly prime.
+
+
+------------------------------------------------------------
+Slide #23 - phi(n) crack
+------------------------------------------------------------
+
+* If you have n and phi(n), you can crack n very easily, because phi(n) =
+(p-1)(q-1).
+
+* p+q = n - phi(n) + 1
+* p-q = sqrt((p+q)^2 - 4n)
+* p = [(p+q) + (p-q)]/2
+* q = [(p+q) - (p-q)]/2
+
+-----------
+Explanation
+-----------
+
+Of course, the likelihood that you have access to phi(n) is the same
+likelihood that you have for p and q. :) Unless the key generator was
+dodgy in the first place. 
+
+It should be noted that this assumes two primes for 'n' are used. There
+are implementations of RSA that use "multiple-primes". Such cases may use
+3 or 4 primes for the creation of a larger modulus but substantially
+weaker than for 2 primes to create the same modulus size.
+
+------------------------------------------------------------
+Slide #24 - Fermat's near sqrt
+------------------------------------------------------------
+
+* Algorithm:
+
+Let sqrt <- sqrt(n)
+Let u <- 2 * sqrt + 1
+Let v <- 1
+Let r <- sqrt^2 - n
+
+while (r != 0) {
+   if (r > 0) {
+      while (r > 0) {
+         r = r - v
+         v = v + 2
+      }
+   }
+
+   if (r < 0) {
+      r = r + u
+      u = u + 2
+   }
+}
+
+Let a <- (u + v - 2) / 2
+Let b <- (u - v) / 2
+
+* Factors are a and b.
+
+-----------
+Explanation
+-----------
+
+The idea behind this algorithm is that whilst in a non-sieve trial
+division you would divide 'n' until sqrt(n), this algorithm starts from
+sqrt(n) and divides away from it.
+
+Of course, if the factors of n is sqrt(n), then it quits even before it
+has started the main loop. 
+
+------------------------------------------------------------
+Slide #25 - Pollard rho
+------------------------------------------------------------
+
+* Recursive algorithm: f(x_[i+1]) = x_i^2 + c
+* Provide c and max values
+
+Let x1 <- 2
+Let x2 <- 4 + c
+Let range <- 1
+Let product <- 1
+Let terms <- 0
+
+while (terms <= max) {
+   for j = 1 to range {
+      x2 = (x2^2 + c) mod n
+      product = product * (x1 - x2) mod n
+      terms = terms + 1
+      if (terms mod 10 == 0) {
+         call check_gcd
+      }
+   }
+
+   call reset
+}
+
+check_gcd:
+   g = gcd(n, product)
+   if (g > 1) {
+      then g is a factor or c value doesn't work.
+   } 
+   product = 1
+   return
+
+reset:
+   x1 = x2
+   range = 2 * range
+   for j = 1 to range
+      x2 = (x2^2 + c) mod n
+   return
+
+-----------
+Explanation
+-----------
+
+It should be noted that "then g is a factor or c value doesn't
+work" simply implies that you need to check to see if g divides n and g
+doesn't equal to n or 1.
+
+This algorithm has been optimised so it may not resemble other versions of
+pollard rho aka Monte Carlo Method. This version is R.P. Brent's optimised
+of pollard rho.
+
+------------------------------------------------------------
+Slide #26 - Pollard p-1
+------------------------------------------------------------
+
+* Simple algorithm
+* Provide c and max values
+
+Let m <- c
+
+For i = 1 to max {
+   m = m^i mod n
+   if (i mod 10 == 0) {
+      call check_gcd
+   }
+}
+
+check_gcd:
+   g = gcd(m-1, n)
+   if (g > 1) {
+      then g is a factor or the c value doesn't work.
+   }
+   return
+
+   
+-----------
+Explanation
+-----------
+
+This is the algorithm which will exploit weak keys, as previously
+discussed. 
+
+------------------------------------------------------------
+Slide #27 - Demonstration
+------------------------------------------------------------
+
+
+-----------
+Explanation
+-----------
+
+A demonstration of several large weak keys are cracked. 
+
+Like all magic tricks, there is usually a dirty secret which reveals the
+explanation. In this case, the primes used aren't the usual primes that
+would be found arbitrarily. However, the demonstration clearly shows that
+the bitsize of a key doesn't automatically guarantee the strength of the
+key.
+
+It should be noted in the pollard p-1 779-bit key, the key was generated
+from two unbounded primes, one of which was significantly smaller than the
+other, and that the largest factor of p-1 (where p is the smaller prime)
+was 67. Also, both primes exhibited non-randomness of digits, as they both
+trailed by a long string of zeroes followed by 1.
+
+In the pollard p-1 268-bit key, it was significantly stronger because the
+largest p-1 factor was 3217337. 
+
+Compared to the hard 127-bit key (which wasn't demonstrated), has a
+largest p-1 factor of 13453079329. However, the size of the 127-bit key
+allows brute forcing, by any of the general factorisation methods.
+
+Obviously, a large key resists these attacks by decreasing the chance of
+small p-1 factors. Also, because the increase in key size is exponential,
+whilst the increase in iterations only give a polynomial increase, so the 
+attacks actually become harder as the keys get larger. 
+
+
+Keys (which were cracked)
+-------------------------
+
+Pollard p-1 with 20K iterations 779-bits
+n: 2967712933176139505325218827281016830172885377668890665422303521091925853065808657763875660509418806842054224785177504767070016206910781672103368981812004063609160919203696870514423547321725245287923332418660222579507200000000000000001 :779 bits (235 digits)
+e: 56496247 :26 bits (8 digits)
+
+Mersenne 2302-bits
+n: 923319341048886661768699703407288183381673098756996869246082769381451358224473935307805781453934402393367117339607771832284020508141968388362107336890044733015902961498110280631739417249258924769397979821492037348737454514098059847835612758397704263074739044309354953596999441291775755993013897091834726593708248793577512981597672464254499702368647798335358065109176978923940291810161270284036947977266438425307049976608840613276602169192372465286328565698666449061798071862569199347631741855812049340271742847831461557006646885820134393895028998143103032907624645601992532368180230674975781066898998263862828605609094236464370477006714425588620812120889806228703005405997723200941814842139403 :2302 bits (693 digits)
+e: 1712372083 :31 bits (10 digits)
+
+Pollard p-1 with 200K iterations 268-bits
+n: 253492469520653197083351904322634118562257623727339245721183851919106703858280081 :268 bits (81 digits)
+e: 1234042721 :31 bits (10 digits)
+
+Keys (can be cracked, but wasn't demonstrated)
+----------------------------------------------
+
+Brute force or Pollard p-1 with 2M iterations 127-bits
+n: 154048638727715990908093481862028012019 :127 bits (39 digits)
+e: 575893529 :30 bits (10 digits)
+
+
+
+------------------------------------------------------------
+Slide #28 - References (not shown in the presentation)
+------------------------------------------------------------
+
+"Prime Numbers - A computational Perspective" by Richard Crandall and
+Carl Pomerance.
+
+"Primes of the form x^2 + ny^2" by David A. Cox
+
+"Sieves in Number Theory" by George Greaves.
+
+"The new book of prime number records" by Paulo Ribenboim.
+
+http://mathworld.wolfram.com/
+http://www.rsa.com/
+http://www.openssl.org/
+
+============================================================
+Recent News
+============================================================
+
+"New Prime Factorisation Record obtained using the General Number Field
+Sieve."
+http://www.ercim.org/publication/Ercim_News/enw49/franke.html
+
+
+--
+EOF
