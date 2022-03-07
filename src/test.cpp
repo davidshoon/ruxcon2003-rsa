@@ -1,11 +1,16 @@
 /*
 	Ruxcon 2003 "Attacking RSA Key generators" by icebsd - revisited
 
-	Factorising the 779-bit key using pollard p-1.
-	Also factorises the 268-bit key using pollard p-1.
-	Optimised code so that it evaluates the modular exponentiation much faster.
+	2022/03/05
+		Factorising the 779-bit key using pollard p-1.
+		Also factorises the 268-bit key using pollard p-1.
+		Optimised code so that it evaluates the modular exponentiation much faster.
 
-	To compile: g++ test.cpp -lgmpxx -lgmp 
+	2022/03/07
+		Added the 127-bit key, and changed "max" to 2M so that it can factorise the 127-bit key.
+		Also added bit/digit size indicator.
+
+	To compile: g++ test.cpp -lgmpxx -lgmp
 
 	You will need to "sudo apt install libgmp-dev" (ubuntu).
 
@@ -63,13 +68,13 @@ mpz_class pollard_p_minus_1(mpz_class c, mpz_class max, mpz_class n)
 
 void func(mpz_class a)
 {
-	std::cout << "a: " << a << std::endl;
+	std::cout << "a: " << a << " :" << mpz_sizeinbase(a.get_mpz_t(), 2) << " bits " << mpz_sizeinbase(a.get_mpz_t(), 10) << " digits" << std::endl;
 
 	mpz_class g;
 
 	for (int i = 2; i < 300; i++) {
 		std::cout << "i: " << i << std::endl;
-		g = pollard_p_minus_1(i, 1000000, a);
+		g = pollard_p_minus_1(i, 2000000, a);
 		if (g != -1) {
 			break;
 		}
@@ -95,6 +100,7 @@ int main()
 
 	func(2967712933176139505325218827281016830172885377668890665422303521091925853065808657763875660509418806842054224785177504767070016206910781672103368981812004063609160919203696870514423547321725245287923332418660222579507200000000000000001_mpz); // 779-bit key
 	func(253492469520653197083351904322634118562257623727339245721183851919106703858280081_mpz); // 268-bit key
+	func(154048638727715990908093481862028012019_mpz); // 127-bit key
 
 	return 0;
 }
